@@ -1,0 +1,62 @@
+# Rust
+/target/
+**/target/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.turbo/
+playwright-report/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+build/
+sdk/python/dist/
+scanner/dist/
+
+# Environment / secrets (never commit)
+.env
+.env.*
+!.env.example
+*.p12
+*.jks
+unseal-shares*.json
+vault-keys*.json
+/certs/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# Helm
+deploy/helm/**/charts/
+*.tgz
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local tool downloads and scratch
+/.tools/
+/tmp/
