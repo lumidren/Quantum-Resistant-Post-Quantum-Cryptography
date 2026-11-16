@@ -32,18 +32,31 @@ CI fails if any implementation disagrees with NIST.
 
 Not every implementation exposes a deterministic entry point for every operation. The matrix below
 records which vectors are checked as **full KATs** (output must equal NIST's expected value) and
-which as **verification KATs** (NIST's expected signature or key must verify / be consistent). CI
-enforces every cell marked here.
+which as **verification KATs** (NIST's expected signature must verify, or NIST's key must be
+structurally consistent and interoperate). Every test asserts how many cases it executed, so an
+empty vector file cannot pass.
 
-| Vectors | Rust (PQClean via `pqcrypto-*`) | Python (liboqs via `oqs`) | TypeScript (`@noble/post-quantum`) |
-|---------|----------------------------------|---------------------------|------------------------------------|
-| ML-KEM keyGen | full (`crypto_kem_keypair_derand`) | full (`generate_keypair_derand`) | full (`keygen(seed)`) |
-| ML-KEM encaps | full (`crypto_kem_enc_derand`) | round trip via `dk` (no derand encaps in bindings) | full (`encapsulate(ek, m)`) |
-| ML-KEM decaps | full | full | full |
-| ML-KEM key checks | full (checks implemented in wrapper) | full (checks implemented in wrapper) | full |
-| ML-DSA keyGen | consistency (sign with `sk`, verify with `pk`) | consistency | full (`keygen(seed)`) |
-| ML-DSA sigGen | verification of expected signature (hedged signing has no deterministic entry point) | verification | full for deterministic cases, verification for hedged |
-| ML-DSA sigVer | full (external pure); internal interface not exposed | full (external pure) | full (external + internal) |
-| SLH-DSA keyGen | full (`crypto_sign_seed_keypair`) | consistency | full |
-| SLH-DSA sigGen | verification | verification | full for deterministic cases |
-| SLH-DSA sigVer | full (external + internal) | full (external) | full |
+### Rust (`crates/qshield-crypto/tests/kat.rs`)
+
+| Vectors | Implementation | Check | Cases |
+|---------|----------------|-------|-------|
+| ML-KEM keyGen | PQClean clean, `crypto_kem_keypair_derand` | full | 15 |
+| ML-KEM encaps | PQClean clean, `crypto_kem_enc_derand` | full, plus decapsulation with NIST's `dk` | 15 |
+| ML-KEM decaps | PQClean clean | full, including implicit-rejection cases | 30 |
+| ML-KEM key checks | FIPS 203 §7.2/§7.3 checks in `kem.rs` | full (pass and fail cases) | 24 |
+| ML-DSA keyGen | PQClean clean | consistency: `rho` shared, `tr = H(pk)`, PQClean signs with NIST's `sk` and verifies under NIST's `pk` | 9 |
+| ML-DSA sigGen | PQClean clean | verification of NIST's signatures, external interface (signing is hedged, so no deterministic entry point exists). The 12 internal-interface cases are counted as skipped because PQClean does not expose `Sign_internal` | 18 |
+| ML-DSA sigVer | PQClean clean | full, external interface; 12 internal-interface cases skipped as above | 24 |
+| SLH-DSA keyGen | slhdsa-c, `slh_keygen_internal` | full | 10 |
+| SLH-DSA sigGen | slhdsa-c, `slh_sign` / `slh_sign_internal` | full: deterministic and randomized (`addrnd`), external and internal | 9 |
+| SLH-DSA sigVer | slhdsa-c | full, external and internal | 12 |
+
+PQClean's SPHINCS+ (`pqcrypto-sphincsplus`) was tested against the same vectors and failed the
+signature cases while passing key generation: it implements SPHINCS+ round 3.1, which differs from
+FIPS 205 in how FORS indices are read from the digest. That result is why SLH-DSA comes from
+slhdsa-c (see `crates/qshield-slhdsa-sys/README.md`).
+
+### Python and TypeScript SDKs
+
+Planned for phase 5 (SDKs): the same vector files will be consumed by the Python SDK test suite and
+the TypeScript SDK test suite, and this section will list their matrix.
