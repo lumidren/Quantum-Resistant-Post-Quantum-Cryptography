@@ -1,0 +1,229 @@
+# QuantumShield algorithm registry.
+#
+# This file is the single source of truth for every algorithm the platform may use. Entries are
+# immutable once published: a parameter change is a new entry with a new id. The only field that
+# may change is `status`, and only forwards: active -> deprecated -> disabled. The loader
+# (crates/qshield-crypto/src/registry.rs) enforces these rules and refuses to start otherwise.
+#
+# status semantics
+#   active      generate new keys, use existing keys, rotate into
+#   deprecated  use existing keys for decapsulate/verify only; no generation, no signing, flagged
+#   disabled    refused everywhere
+#
+# Every id appears in stored key records, envelopes, wire headers and CBOM entries.
+
+registry_version = 2
+
+# ---------------------------------------------------------------------------------------------
+# Key encapsulation
+# ---------------------------------------------------------------------------------------------
+
+[[algorithm]]
+id = "ml-kem-512"
+version = 1
+family = "kem"
+standard = "FIPS 203"
+oid = "2.16.840.1.101.3.4.4.1"
+nist_level = 1
+status = "deprecated"
+deprecated = "2026-11-03"
+quantum_safe = true
+public_key_len = 800
+secret_key_len = 1632
+ciphertext_len = 768
+shared_secret_len = 32
+implementation = "PQClean clean (via pqcrypto)"
+introduced = "2026-11-03"
+notes = "Sample deprecation: level 1 is below the platform minimum of level 3. Existing keys decapsulate; migration 0003 flags them for rotation."
+
+[[algorithm]]
+id = "ml-kem-768"
+version = 1
+family = "kem"
+standard = "FIPS 203"
+oid = "2.16.840.1.101.3.4.4.2"
+nist_level = 3
+status = "active"
+quantum_safe = true
+public_key_len = 1184
+secret_key_len = 2400
+ciphertext_len = 1088
+shared_secret_len = 32
+implementation = "PQClean clean (via pqcrypto)"
+introduced = "2026-11-03"
+
+[[algorithm]]
+id = "ml-kem-1024"
+version = 1
+family = "kem"
+standard = "FIPS 203"
+oid = "2.16.840.1.101.3.4.4.3"
+nist_level = 5
+status = "active"
+quantum_safe = true
+public_key_len = 1568
+secret_key_len = 3168
+ciphertext_len = 1568
+shared_secret_len = 32
+implementation = "PQClean clean (via pqcrypto)"
+introduced = "2026-11-03"
+
+[[algorithm]]
+id = "x25519"
+version = 1
+family = "kem"
+standard = "RFC 7748"
+oid = "1.3.101.110"
+nist_level = 0
+status = "active"
+quantum_safe = false
+public_key_len = 32
+secret_key_len = 32
+ciphertext_len = 32
+shared_secret_len = 32
+implementation = "x25519-dalek"
+introduced = "2026-11-03"
+notes = "Classical component only; never used alone for new keys (see hybrid-x25519-ml-kem-768)."
+
+[[algorithm]]
+id = "hybrid-x25519-ml-kem-768"
+version = 1
+family = "hybrid-kem"
+standard = "draft-ietf-tls-hybrid-design / FIPS 203 + RFC 7748"
+nist_level = 3
+status = "active"
+quantum_safe = true
+components = ["x25519", "ml-kem-768"]
+public_key_len = 1216
+secret_key_len = 2432
+ciphertext_len = 1120
+shared_secret_len = 32
+implementation = "qshield-crypto combiner (HKDF-SHA256 over both secrets and both ciphertexts)"
+introduced = "2026-11-03"
+
+# ---------------------------------------------------------------------------------------------
+# Signatures
+# ---------------------------------------------------------------------------------------------
+
+[[algorithm]]
+id = "ml-dsa-44"
+version = 1
+family = "signature"
+standard = "FIPS 204"
+oid = "2.16.840.1.101.3.4.3.17"
+nist_level = 2
+status = "deprecated"
+deprecated = "2026-11-03"
+quantum_safe = true
+public_key_len = 1312
+secret_key_len = 2560
+signature_len = 2420
+implementation = "PQClean clean (via pqcrypto)"
+introduced = "2026-11-03"
+notes = "Below the platform minimum of level 3; verify-only."
+
+[[algorithm]]
+id = "ml-dsa-65"
+version = 1
+family = "signature"
+standard = "FIPS 204"
+oid = "2.16.840.1.101.3.4.3.18"
+nist_level = 3
+status = "active"
+quantum_safe = true
+public_key_len = 1952
+secret_key_len = 4032
+signature_len = 3309
+implementation = "PQClean clean (via pqcrypto)"
+introduced = "2026-11-03"
+
+[[algorithm]]
+id = "ml-dsa-87"
+version = 1
+family = "signature"
+standard = "FIPS 204"
+oid = "2.16.840.1.101.3.4.3.19"
+nist_level = 5
+status = "active"
+quantum_safe = true
+public_key_len = 2592
+secret_key_len = 4896
+signature_len = 4627
+implementation = "PQClean clean (via pqcrypto)"
+introduced = "2026-11-03"
+
+[[algorithm]]
+id = "slh-dsa-sha2-128s"
+version = 1
+family = "signature"
+standard = "FIPS 205"
+oid = "2.16.840.1.101.3.4.3.20"
+nist_level = 1
+status = "active"
+quantum_safe = true
+public_key_len = 32
+secret_key_len = 64
+signature_len = 7856
+implementation = "slhdsa-c (PQCA; the code liboqs copies), vendored in qshield-slhdsa-sys"
+introduced = "2026-11-03"
+notes = "Hash-based; conservative assumption independent of lattices. Level 1 accepted for this family because its security relies only on SHA-256 preimage resistance (128-bit PQ security)."
+
+[[algorithm]]
+id = "ed25519"
+version = 1
+family = "signature"
+standard = "RFC 8032"
+oid = "1.3.101.112"
+nist_level = 0
+status = "active"
+quantum_safe = false
+public_key_len = 32
+secret_key_len = 32
+signature_len = 64
+implementation = "ed25519-dalek"
+introduced = "2026-11-03"
+notes = "Classical component only; never used alone for new keys (see hybrid-ed25519-ml-dsa-65)."
+
+[[algorithm]]
+id = "hybrid-ed25519-ml-dsa-65"
+version = 1
+family = "hybrid-signature"
+standard = "FIPS 204 + RFC 8032"
+nist_level = 3
+status = "active"
+quantum_safe = true
+components = ["ed25519", "ml-dsa-65"]
+public_key_len = 1984
+secret_key_len = 4064
+signature_len = 3373
+implementation = "qshield-crypto combiner (both signatures over a domain-separated message)"
+introduced = "2026-11-03"
+
+# ---------------------------------------------------------------------------------------------
+# Symmetric
+# ---------------------------------------------------------------------------------------------
+
+[[algorithm]]
+id = "aes-256-gcm"
+version = 1
+family = "aead"
+standard = "NIST SP 800-38D"
+oid = "2.16.840.1.101.3.4.1.46"
+nist_level = 5
+status = "active"
+quantum_safe = true
+key_len = 32
+implementation = "aes-gcm (RustCrypto) / OpenSSL / noble-ciphers"
+introduced = "2026-11-03"
+
+[[algorithm]]
+id = "hkdf-sha256"
+version = 1
+family = "kdf"
+standard = "RFC 5869"
+nist_level = 5
+status = "active"
+quantum_safe = true
+key_len = 32
+implementation = "hkdf (RustCrypto) / OpenSSL / noble-hashes"
+introduced = "2026-11-03"
