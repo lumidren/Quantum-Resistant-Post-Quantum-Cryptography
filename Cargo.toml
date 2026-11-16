@@ -1,0 +1,61 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/qshield-crypto",
+    "crates/qshield-slhdsa-sys",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/lumidren/Quantum-Resistant-Post-Quantum-Cryptography"
+rust-version = "1.85"
+authors = ["QuantumShield contributors"]
+
+[workspace.dependencies]
+# Post-quantum primitives.
+# ML-KEM (FIPS 203) and ML-DSA (FIPS 204): PQClean clean + AVX2 implementations via pqcrypto.
+# SLH-DSA (FIPS 205): vendored PQCA slhdsa-c (the code liboqs copies), see crates/qshield-slhdsa-sys.
+# pqcrypto-sphincsplus is deliberately absent: it is SPHINCS+ round 3.1, not FIPS 205.
+pqcrypto-mlkem = "0.1.1"
+pqcrypto-mldsa = "0.1.2"
+pqcrypto-traits = "0.3.5"
+qshield-slhdsa-sys = { path = "crates/qshield-slhdsa-sys" }
+cc = "1.2"
+# Classical primitives.
+x25519-dalek = { version = "2.0", features = ["static_secrets", "zeroize"] }
+ed25519-dalek = { version = "2.1", features = ["rand_core", "zeroize"] }
+aes-gcm = "0.10"
+hkdf = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+sha3 = "0.10"
+blake3 = "1.8"
+rand_core = { version = "0.6", features = ["getrandom"] }
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
+subtle = "2.6"
+# Serialization and errors.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+hex = "0.4"
+base64 = "0.22"
+libc = "0.2"
+# Testing.
+proptest = "1"
+dudect-bencher = "0.7"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+debug = false
+strip = "symbols"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.qshield-slhdsa-sys]
+opt-level = 3

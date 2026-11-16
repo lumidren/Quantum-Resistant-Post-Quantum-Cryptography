@@ -1,0 +1,47 @@
+[package]
+name = "qshield-crypto"
+description = "QuantumShield cryptographic core: NIST PQC (ML-KEM, ML-DSA, SLH-DSA) with hybrid combiners, envelope sealing and the algorithm registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# Exposes deterministic (seeded) key generation and encapsulation plus internal signature
+# interfaces. These exist ONLY to run NIST known-answer tests. Never enable in production builds.
+kat = []
+
+[dependencies]
+pqcrypto-mlkem = { workspace = true }
+pqcrypto-mldsa = { workspace = true }
+pqcrypto-traits = { workspace = true }
+qshield-slhdsa-sys = { workspace = true }
+x25519-dalek = { workspace = true }
+ed25519-dalek = { workspace = true }
+aes-gcm = { workspace = true }
+hkdf = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+sha3 = { workspace = true }
+rand_core = { workspace = true }
+zeroize = { workspace = true }
+subtle = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+qshield-crypto = { path = ".", features = ["kat"] }
+proptest = { workspace = true }
+serde_json = { workspace = true }
+dudect-bencher = { workspace = true }
+sha3 = { workspace = true }
+
+[[bench]]
+name = "dudect"
+harness = false
