@@ -1,0 +1,18 @@
+[package]
+name = "qshield-slhdsa-sys"
+description = "FFI bindings to the vendored PQCA slhdsa-c implementation of FIPS 205 (SLH-DSA)"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+# Bindings: Apache-2.0. Vendored slhdsa-c: Apache-2.0 OR ISC OR MIT (see vendor/slhdsa-c/LICENSE).
+license = "Apache-2.0 AND (Apache-2.0 OR ISC OR MIT)"
+links = "qshield_slhdsa"
+build = "build.rs"
+include = ["src/**", "build.rs", "vendor/slhdsa-c/**", "README.md"]
+
+[dependencies]
+
+[build-dependencies]
+cc = { workspace = true }
