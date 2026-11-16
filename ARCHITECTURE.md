@@ -33,7 +33,7 @@ This document is the single source of truth for the system design. It contains:
 |---|------|---------------|
 | G1 | Make real services quantum-safe today | Hybrid TLS gateway (X25519MLKEM768) in front of any HTTP service; KMS that issues and operates PQ and hybrid keys; E2EE messaging that is PQ from the first message. |
 | G2 | Never drop below the classical baseline | Every key exchange and signature is hybrid: X25519 + ML-KEM-768, Ed25519 + ML-DSA-65. A break of either component leaves the other intact (see §5.4). |
-| G3 | Only vetted implementations | PQ primitives come from PQClean (via the `pqcrypto-*` Rust crates), liboqs (via the `oqs` Python bindings) and the audited `@noble/post-quantum` library for browsers. No lattice arithmetic is written in this repository. |
+| G3 | Only vetted implementations | ML-KEM and ML-DSA come from PQClean (compiled by the `pqcrypto-*` crates), SLH-DSA from the PQCA slhdsa-c library that liboqs itself copies, Python uses liboqs through `oqs`, and browsers use `@noble/post-quantum`. No lattice or hash-tree arithmetic is written in this repository; NIST ACVP KATs pin every implementation to the standard (§5.6). |
 | G4 | Crypto-agility | Algorithms are versioned registry entries (`registry/algorithms.toml`). Adding or deprecating one is a config change plus a database migration, not a code rewrite (§6). |
 | G5 | Launch-grade engineering | KATs against official NIST ACVP vectors, property and protocol tests, constant-time timing tests, SAST, SBOM, signed images, Helm/Terraform, observability, runbooks. |
 | G6 | Tangible migration tooling | `qshield-scan` produces a CycloneDX 1.6 CBOM with a quantum-readiness score and per-asset migration advice. |
@@ -59,7 +59,7 @@ services that touch private key material. The decisive factors:
 
 | Requirement | Rust | Go | Verdict |
 |-------------|------|----|---------|
-| Vetted ML-KEM **and** ML-DSA **and** SLH-DSA | `pqcrypto-mlkem`, `pqcrypto-mldsa`, `pqcrypto-sphincsplus` wrap the PQClean reference and AVX2 implementations; `oqs` wraps liboqs. All three FIPS families covered. | Go 1.24 standard library ships ML-KEM only. ML-DSA/SLH-DSA need cgo + liboqs or third-party pure-Go code with limited review. | Rust |
+| Vetted ML-KEM **and** ML-DSA **and** SLH-DSA | `pqcrypto-mlkem` and `pqcrypto-mldsa` compile PQClean; the C entry points are called directly so secrets stay in zeroizing buffers. FIPS 205 SLH-DSA comes from the vendored PQCA slhdsa-c (the code liboqs copies) because PQClean only ships SPHINCS+ round 3.1. All three FIPS families covered, each pinned by NIST ACVP KATs. | Go 1.24 standard library ships ML-KEM only. ML-DSA/SLH-DSA need cgo + liboqs or third-party pure-Go code with limited review. | Rust |
 | Memory zeroization of secrets | `zeroize` crate gives compiler-fenced wiping on drop; `Zeroizing<T>` wrappers make it hard to forget. | GC-managed memory cannot be reliably wiped; copies survive in heap/stack. | Rust |
 | Constant-time primitives | `subtle` crate for CT equality/selection; dalek curves are CT by construction. | `crypto/subtle` exists but ecosystem CT discipline is weaker. | Rust |
 | TLS 1.3 with client certificates (mTLS) | `rustls` + `axum-server`; no OpenSSL dependency at runtime. | `crypto/tls` is excellent. | Tie |
@@ -76,8 +76,10 @@ slower build and a steeper learning curve, which is acceptable for a security-cr
 * The brief requires a pip-installable SDK and a browser SDK. Python uses `oqs` (liboqs) for
   ML-KEM/ML-DSA and `cryptography` (OpenSSL-backed) for X25519/Ed25519/AES-GCM/HKDF.
 * The TypeScript SDK uses `@noble/post-quantum`, `@noble/curves`, `@noble/ciphers` and
-  `@noble/hashes`. These are independently audited (Cure53, 2024/2025), pure-TypeScript, and run in
-  browsers, Node and Deno. `liboqs-wasm` is **not** a published npm package; the closest option,
+  `@noble/hashes`. These are pure-TypeScript, run in browsers, Node and Deno, and are tested by
+  their author against the NIST ACVP vectors; QuantumShield additionally runs its own KAT files
+  against them. The audit status of each package is taken from its own security notes and recorded
+  in `sdk/typescript/README.md`. `liboqs-wasm` is **not** a published npm package; the closest option,
   `liboqs-node`, is a native addon that cannot run in a browser. The noble libraries are therefore
   the vetted browser implementation. This is recorded as ADR-004.
 * The scanner is Python because the job is dominated by text parsing, X.509 parsing and TLS
@@ -236,11 +238,11 @@ flowchart TB
 
 | Purpose | Algorithm | Parameter | Source implementation | Why |
 |---------|-----------|-----------|-----------------------|-----|
-| PQ key encapsulation (default) | ML-KEM | 768 | PQClean via `pqcrypto-mlkem`; liboqs via `oqs`; noble | NIST level 3 (AES-192 equivalent). 1184-byte public key and 1088-byte ciphertext fit comfortably in TLS and messaging headers. Matches the IETF `X25519MLKEM768` TLS group and Signal's PQXDH choice. |
+| PQ key encapsulation (default) | ML-KEM | 768 | PQClean clean (compiled by `pqcrypto-mlkem`); liboqs via `oqs`; noble | NIST level 3 (AES-192 equivalent). 1184-byte public key and 1088-byte ciphertext fit comfortably in TLS and messaging headers. Matches the IETF `X25519MLKEM768` TLS group and Signal's PQXDH choice. |
 | PQ key encapsulation (high) | ML-KEM | 1024 | same | NIST level 5 for long-lived KMS keys that wrap data with multi-decade confidentiality needs. |
-| PQ signatures (default) | ML-DSA | 65 | PQClean via `pqcrypto-mldsa`; liboqs; noble | Level 3, 1952-byte public key, 3309-byte signature. Fast verification, deterministic or hedged signing. Chosen for prekey and identity signatures where volume is high. |
+| PQ signatures (default) | ML-DSA | 65 | PQClean clean (compiled by `pqcrypto-mldsa`); liboqs; noble | Level 3, 1952-byte public key, 3309-byte signature. Fast verification, deterministic or hedged signing. Chosen for prekey and identity signatures where volume is high. |
 | PQ signatures (high) | ML-DSA | 87 | same | Level 5 for root/CA style KMS keys. |
-| PQ stateless hash signatures | SLH-DSA | SHA2-128s | PQClean via `pqcrypto-sphincsplus`; liboqs | Hash-based, conservative security assumption independent of lattices. "s" (small) variant: 7856-byte signature, 32-byte public key, slow signing. Used for low-volume, long-horizon signing such as release and firmware signing and the registry signing key. |
+| PQ stateless hash signatures | SLH-DSA | SHA2-128s | PQCA slhdsa-c, vendored in `qshield-slhdsa-sys` (liboqs copies the same code); noble | Hash-based, conservative security assumption independent of lattices. "s" (small) variant: 7856-byte signature, 32-byte public key, slow signing. Used for low-volume, long-horizon signing such as release and firmware signing and the registry signing key. |
 | Classical KEM / DH | X25519 | 256-bit | `x25519-dalek`; OpenSSL via `cryptography`; noble | Constant-time, widely deployed, the classical half of `X25519MLKEM768`. |
 | Classical signatures | Ed25519 | 256-bit | `ed25519-dalek`; OpenSSL; noble | Deterministic, small, fast; the classical half of the hybrid signature. |
 | AEAD | AES-256-GCM | 256-bit key, 96-bit nonce | `aes-gcm`; OpenSSL; noble | Required by the brief; hardware accelerated; 256-bit key keeps a margin against Grover-style speed-ups. Nonces are never reused: envelope sealing uses a fresh random nonce per seal, the ratchet derives key and nonce from a one-time message key. |
@@ -305,6 +307,24 @@ never be confused with another:
 | Envelope AAD | `qshield-envelope-v1` plus key id, algorithm id and version |
 | Audit chain event hash | `qshield-audit-v1` |
 | Safety number | `QS-Fingerprint-v1` |
+
+### 5.6 How implementations are bound to the standards
+
+* **Known-answer tests.** `tests/kat/vectors` holds a deterministic subset of NIST's ACVP vectors
+  (190 cases). `crates/qshield-crypto/tests/kat.rs` checks ML-KEM key generation, encapsulation,
+  decapsulation (including implicit rejection) and the FIPS 203 key checks byte for byte; SLH-DSA
+  key generation and deterministic and randomized signing byte for byte; and ML-DSA through
+  verification of NIST's signatures and structural checks of NIST's keys (PQClean signs only in
+  hedged mode). `tests/kat/README.md` lists the matrix.
+* **Why SLH-DSA is not PQClean.** The same KATs showed that `pqcrypto-sphincsplus` (PQClean
+  SPHINCS+ round 3.1) passes FIPS 205 key generation but fails FIPS 205 signatures, because FIPS
+  205 reads FORS indices from the digest in a different bit order. slhdsa-c passes every case.
+* **Zeroization.** The pqcrypto Rust wrappers return secret keys and shared secrets as `Copy`
+  arrays that are never wiped. `crates/qshield-crypto/src/pqc.rs` therefore calls PQClean's C entry
+  points directly with output buffers owned by zeroizing containers.
+* **One code path everywhere.** pqcrypto compiles PQClean's AVX2 code only on x86-64 Linux. The
+  portable "clean" implementation is used on every platform, so the code measured by the KATs and
+  the dudect timing tests on any machine is the code that runs in production.
 
 ---
 
@@ -718,7 +738,7 @@ observability stack.
 | ADR | Decision | Status |
 |-----|----------|--------|
 | ADR-001 | Rust for KMS and relay (see §2.1) | Accepted |
-| ADR-002 | PQClean via `pqcrypto-*` crates as the Rust PQ implementation; liboqs via `oqs` for Python | Accepted |
+| ADR-002 | PQClean (compiled by the `pqcrypto-*` crates, called through `pqc.rs`) for ML-KEM and ML-DSA in Rust; liboqs via `oqs` for Python | Accepted |
 | ADR-003 | nginx + OpenSSL 3.5 native hybrid groups instead of oqs-provider | Accepted |
 | ADR-004 | `@noble/post-quantum` for the browser SDK because `liboqs-wasm` does not exist on npm and `liboqs-node` is native-only | Accepted |
 | ADR-005 | Hybrid signatures on **all** prekeys, binding both identity key sets into the PQXDH AD | Accepted |
@@ -727,3 +747,5 @@ observability stack.
 | ADR-008 | Hash-chained audit log in the same transaction as the operation | Accepted |
 | ADR-009 | API keys hashed with keyed BLAKE3 and a server-side pepper | Accepted |
 | ADR-010 | CycloneDX 1.6 `cryptographic-asset` components for the CBOM | Accepted |
+| ADR-011 | SLH-DSA from vendored PQCA slhdsa-c instead of `pqcrypto-sphincsplus` (round 3.1, fails FIPS 205 KATs) or the `oqs` crate (needs CMake to build liboqs). Symbols are prefixed `qshield_slhdsa_` to avoid collisions; upstream commit and file hashes are pinned in the crate README | Accepted |
+| ADR-012 | Call PQClean's portable C entry points directly: secrets land in zeroizing buffers, and dev, CI and production run the same constant-time code | Accepted |

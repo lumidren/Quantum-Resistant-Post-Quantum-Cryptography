@@ -209,7 +209,7 @@ key comparison leak secret bits.
 
 | Mitigation | Reference | Status |
 |------------|-----------|--------|
-| T11-M1 PQ primitives come from PQClean/liboqs implementations written to be constant-time; no secret-dependent branching is written in this repo | `crates/qshield-crypto/src/kem.rs:1` | verified by dudect-style tests |
+| T11-M1 PQ primitives come from PQClean's portable constant-time code (and slhdsa-c for SLH-DSA); no secret-dependent branching is written in this repo | `crates/qshield-crypto/src/pqc.rs:1` | verified by dudect-style tests |
 | T11-M2 All secret comparisons use `subtle::ConstantTimeEq` / `hmac.compare_digest` / noble's CT equality | `crates/qshield-kms/src/auth.rs:1`, `sdk/python/qshield/ratchet.py:1` | verified |
 | T11-M3 dudect-style timing tests for decapsulation and signing with committed results | `crates/qshield-crypto/benches/dudect.rs:1`, `docs/TIMING_RESULTS.md` | verified |
 | T11-M4 Hybrid verification evaluates both signatures before deciding (no early exit on the classical result) | `crates/qshield-crypto/src/hybrid.rs:1` | verified |
@@ -262,6 +262,8 @@ runner introduces a backdoor.
 | T15-M3 SBOM generated with Syft; images signed with cosign (keyless, Sigstore); deployment verifies signatures | `.github/workflows/release.yml:1`, `deploy/k8s/policy/cosign-policy.yaml:1` | verified |
 | T15-M4 SAST (Semgrep OWASP, cargo-audit/clippy, Bandit) and Trivy on images | `.github/workflows/ci.yml:1` | verified |
 | T15-M5 Multi-stage distroless images with pinned base digests | `deploy/docker/kms.Dockerfile:1` | verified |
+| T15-M6 Vendored C sources (slhdsa-c) are pinned to an upstream commit with per-file SHA-256 sums; CI fails if a vendored file changes | `scripts/vendor_slhdsa.sh:1` | verified |
+| T15-M7 Implementation swaps are caught by KATs: PQClean SPHINCS+ was rejected after failing the FIPS 205 vectors | `crates/qshield-crypto/tests/kat.rs:1` | verified |
 
 ## 5. Residual risks
 
@@ -272,3 +274,5 @@ runner introduces a backdoor.
 | A CRQC breaks ML-KEM **and** the classical component is also broken | Not defensible with current standards | Crypto-agility makes replacing a component a configuration change |
 | Endpoint compromise before session setup | Out of scope for any E2EE protocol | Safety-number verification detects identity key substitution |
 | Bandwidth cost of repeating `kem_pub` and `kem_ct` in every header (~2.3 KB) | Simplicity and out-of-order robustness | ADR-006; revisit with SPQR |
+| SLH-DSA implementation (slhdsa-c) is marked work in progress by its maintainers | It is the FIPS 205 code liboqs ships; no stable, KAT-passing alternative builds without CMake | Used only for low-volume KMS signing keys; every ACVP SLH-DSA-SHA2-128s vector passes byte for byte; upstream pinned by commit and hash |
+| Secret-dependent intermediates may remain on the C stack after PQClean or slhdsa-c calls | The C libraries do not wipe their stack frames | Rust-owned buffers are zeroized; the KMS runs with core dumps disabled and memory locked where the platform allows |
